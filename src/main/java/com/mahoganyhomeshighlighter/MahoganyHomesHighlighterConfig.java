@@ -1,0 +1,92 @@
+package com.mahoganyhomeshighlighter;
+
+import java.awt.Color;
+import net.runelite.client.config.Alpha;
+import net.runelite.client.config.Config;
+import net.runelite.client.config.ConfigGroup;
+import net.runelite.client.config.ConfigItem;
+import net.runelite.client.config.ConfigSection;
+
+@ConfigGroup(MahoganyHomesHighlighterConfig.GROUP_NAME)
+public interface MahoganyHomesHighlighterConfig extends Config
+{
+	String GROUP_NAME = "mahoganyhomeshighlighter";
+
+	@ConfigSection(
+		name = "Highlight colors",
+		description = "Colors used when highlighting contract objects",
+		position = 0
+	)
+	String colorSection = "colorSection";
+
+	@Alpha
+	@ConfigItem(
+		keyName = "removeColor",
+		name = "Remove color",
+		description = "Highlight color for furniture that needs to be removed",
+		section = colorSection,
+		position = 0
+	)
+	default Color removeColor()
+	{
+		return new Color(255, 0, 0, 80);
+	}
+
+	@Alpha
+	@ConfigItem(
+		keyName = "buildColor",
+		name = "Build color",
+		description = "Highlight color for hotspots and furniture that needs to be built",
+		section = colorSection,
+		position = 1
+	)
+	default Color buildColor()
+	{
+		return new Color(0, 255, 0, 80);
+	}
+
+	@Alpha
+	@ConfigItem(
+		keyName = "repairColor",
+		name = "Repair color",
+		description = "Highlight color for furniture that needs to be repaired",
+		section = colorSection,
+		position = 2
+	)
+	default Color repairColor()
+	{
+		return new Color(255, 165, 0, 80);
+	}
+
+	@ConfigSection(
+		name = "Render options",
+		description = "Options for how objects are highlighted",
+		position = 100,
+		closedByDefault = true
+	)
+	String renderSection = "renderSection";
+
+	@ConfigItem(
+		keyName = "highlightHull",
+		name = "Highlight hull",
+		description = "Highlight the object hull",
+		section = renderSection,
+		position = 0
+	)
+	default boolean highlightHull()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "highlightClickbox",
+		name = "Highlight clickbox",
+		description = "Highlight the object clickbox",
+		section = renderSection,
+		position = 1
+	)
+	default boolean highlightClickbox()
+	{
+		return false;
+	}
+}
