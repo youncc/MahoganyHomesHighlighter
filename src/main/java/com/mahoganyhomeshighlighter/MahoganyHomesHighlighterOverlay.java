@@ -12,8 +12,10 @@ import javax.annotation.Nullable;
 import javax.inject.Inject;
 import net.runelite.api.Client;
 import net.runelite.api.DecorativeObject;
+import com.mahoganyhomeshighlighter.ContractStairUtil.ClimbDirection;
 import net.runelite.api.GameObject;
 import net.runelite.api.GroundObject;
+import net.runelite.api.NPC;
 import net.runelite.api.Point;
 import net.runelite.api.TileObject;
 import net.runelite.api.WallObject;
@@ -67,11 +69,16 @@ class MahoganyHomesHighlighterOverlay extends Overlay
 		final Point mousePosition = client.getMouseCanvasPosition();
 		final Stroke stroke = new BasicStroke(BORDER_WIDTH);
 
-		if (!plugin.getObjectsToMark().isEmpty())
+		if (config.highlightFurniture() && !plugin.getObjectsToMark().isEmpty())
 		{
 			for (TileObject object : plugin.getObjectsToMark())
 			{
 				if (object.getPlane() != playerPlane)
+				{
+					continue;
+				}
+
+				if (!home.isContractObject(object.getId()))
 				{
 					continue;
 				}
@@ -81,7 +88,7 @@ class MahoganyHomesHighlighterOverlay extends Overlay
 					continue;
 				}
 
-				final Hotspot hotspot = Hotspot.getByObjectId(object.getId());
+				final Hotspot hotspot = home.getHotspotForContractObject(object.getId());
 				if (hotspot == null)
 				{
 					continue;
@@ -101,6 +108,16 @@ class MahoganyHomesHighlighterOverlay extends Overlay
 		if (config.highlightDoors() || config.showDoorStatusText())
 		{
 			renderDoors(graphics, home, playerPlane, mousePosition, stroke);
+		}
+
+		if (config.highlightStairs() || config.showStairStatusText())
+		{
+			renderStairs(graphics, home, playerPlane, mousePosition, stroke);
+		}
+
+		if (config.highlightHomeowner() && plugin.isContractComplete())
+		{
+			renderHomeowner(graphics, stroke);
 		}
 
 		return null;
@@ -132,13 +149,104 @@ class MahoganyHomesHighlighterOverlay extends Overlay
 			if (config.showDoorStatusText())
 			{
 				final String text = state == ContractDoorUtil.DoorState.OPEN ? "Open" : "Closed";
-				final Point textLocation = getDoorStatusTextLocation(graphics, object, text);
+				final Point textLocation = getObjectStatusTextLocation(graphics, object, text);
 				if (textLocation != null)
 				{
 					OverlayUtil.renderTextLocation(graphics, textLocation, text, highlightColor);
 				}
 			}
 		});
+	}
+
+	private void renderStairs(
+		Graphics2D graphics,
+		Home home,
+		int playerPlane,
+		Point mousePosition,
+		Stroke stroke)
+	{
+		final int remainingTasks = plugin.getRemainingTaskCount();
+		final int countOnFloor = plugin.getRemainingTasksOnPlane(playerPlane);
+		if (!ContractStairUtil.shouldHighlightStairs(home, playerPlane, countOnFloor, remainingTasks))
+		{
+			return;
+		}
+
+		final int visibleAbove = plugin.getRemainingTasksAbovePlane(playerPlane);
+		final int visibleBelow = plugin.getRemainingTasksBelowPlane(playerPlane);
+		final int tasksAbove = ContractStairUtil.countTasksAbove(playerPlane, countOnFloor, remainingTasks, visibleAbove);
+		final int tasksBelow = ContractStairUtil.countTasksBelow(playerPlane, countOnFloor, remainingTasks, visibleBelow);
+		final Color highlightColor = config.stairColor();
+
+		for (final GameObject ladder : plugin.getLaddersToMark())
+		{
+			if (ladder.getPlane() != playerPlane)
+			{
+				continue;
+			}
+
+			if (distanceBetween(home.getArea(), ladder.getWorldLocation()) > 0)
+			{
+				continue;
+			}
+
+			final ClimbDirection climbDirection = ContractStairUtil.getClimbDirection(client, ladder.getId());
+			if (climbDirection == null)
+			{
+				continue;
+			}
+
+			if (!ContractStairUtil.shouldHighlightLadder(
+				home, climbDirection, playerPlane, tasksAbove, tasksBelow, remainingTasks))
+			{
+				continue;
+			}
+
+			if (config.highlightStairs())
+			{
+				renderHighlight(graphics, ladder, highlightColor, mousePosition, stroke);
+			}
+
+			if (config.showStairStatusText())
+			{
+				final String text = ContractStairUtil.getStairLabel(
+					home, climbDirection, playerPlane, tasksAbove, tasksBelow, remainingTasks);
+				if (text != null)
+				{
+					final Point textLocation = getObjectStatusTextLocation(graphics, ladder, text);
+					if (textLocation != null)
+					{
+						OverlayUtil.renderTextLocation(graphics, textLocation, text, highlightColor);
+					}
+				}
+			}
+		}
+	}
+
+	private void renderHomeowner(Graphics2D graphics, Stroke stroke)
+	{
+		final NPC homeowner = plugin.getHomeownerNpc();
+		if (homeowner == null)
+		{
+			return;
+		}
+
+		final Color highlightColor = config.homeownerColor();
+		final Shape hull = homeowner.getConvexHull();
+		if (hull != null)
+		{
+			final Color fillColor = new Color(
+				highlightColor.getRed(),
+				highlightColor.getGreen(),
+				highlightColor.getBlue(),
+				Math.min(highlightColor.getAlpha(), 50));
+			OverlayUtil.renderPolygon(graphics, hull, highlightColor, fillColor, stroke);
+		}
+
+		if (config.highlightClickbox())
+		{
+			OverlayUtil.renderActorOverlay(graphics, homeowner, "", highlightColor);
+		}
 	}
 
 	private void renderHighlight(
@@ -181,7 +289,7 @@ class MahoganyHomesHighlighterOverlay extends Overlay
 	}
 
 	@Nullable
-	private Point getDoorStatusTextLocation(Graphics2D graphics, TileObject object, String text)
+	private Point getObjectStatusTextLocation(Graphics2D graphics, TileObject object, String text)
 	{
 		int topY = Integer.MAX_VALUE;
 		int centerX = 0;

@@ -5,6 +5,7 @@ import com.google.inject.Provides;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.annotation.Nullable;
@@ -15,6 +16,8 @@ import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameObject;
 import net.runelite.api.GameState;
+import net.runelite.api.NPC;
+import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.GameObjectDespawned;
 import net.runelite.api.events.GameObjectSpawned;
 import net.runelite.api.events.GameStateChanged;
@@ -70,6 +73,9 @@ public class MahoganyHomesHighlighterPlugin extends Plugin
 	@Getter
 	private final List<GameObject> objectsToMark = new ArrayList<>();
 
+	@Getter
+	private final List<GameObject> laddersToMark = new ArrayList<>();
+
 	private final HashMap<Integer, Integer> varbMap = new HashMap<>();
 
 	@Getter
@@ -105,6 +111,7 @@ public class MahoganyHomesHighlighterPlugin extends Plugin
 	{
 		overlayManager.remove(highlightOverlay);
 		objectsToMark.clear();
+		laddersToMark.clear();
 		varbMap.clear();
 		currentHome = null;
 	}
@@ -121,6 +128,7 @@ public class MahoganyHomesHighlighterPlugin extends Plugin
 		if (event.getGameState() == GameState.LOADING)
 		{
 			objectsToMark.clear();
+			laddersToMark.clear();
 		}
 		else if (event.getGameState() == GameState.LOGGED_IN)
 		{
@@ -193,6 +201,115 @@ public class MahoganyHomesHighlighterPlugin extends Plugin
 		}
 
 		return HotspotAction.fromVarbValue(value);
+	}
+
+	int getRemainingTaskCount()
+	{
+		if (currentHome == null)
+		{
+			return 0;
+		}
+
+		int count = 0;
+		for (int i = 0; i < currentHome.getContractHotspotCount(); i++)
+		{
+			if (getHotspotAction(Hotspot.values()[i].getVarb()) != null)
+			{
+				count++;
+			}
+		}
+		return count;
+	}
+
+	int getRemainingTasksOnPlane(final int plane)
+	{
+		return countActiveContractObjects(object -> object.getPlane() == plane);
+	}
+
+	int getRemainingTasksAbovePlane(final int plane)
+	{
+		return countActiveContractObjects(object -> object.getPlane() > plane);
+	}
+
+	int getRemainingTasksBelowPlane(final int plane)
+	{
+		return countActiveContractObjects(object -> object.getPlane() < plane);
+	}
+
+	private int countActiveContractObjects(final Predicate<GameObject> planeFilter)
+	{
+		if (currentHome == null)
+		{
+			return 0;
+		}
+
+		int count = 0;
+		for (final GameObject object : objectsToMark)
+		{
+			if (!planeFilter.test(object))
+			{
+				continue;
+			}
+
+			if (isActiveContractObject(object))
+			{
+				count++;
+			}
+		}
+		return count;
+	}
+
+	boolean isActiveContractObject(final GameObject object)
+	{
+		if (currentHome == null)
+		{
+			return false;
+		}
+
+		if (!currentHome.isContractObject(object.getId()))
+		{
+			return false;
+		}
+
+		final WorldPoint location = object.getWorldLocation();
+		if (location == null || !currentHome.containsWorldPoint(location))
+		{
+			return false;
+		}
+
+		final Hotspot hotspot = currentHome.getHotspotForContractObject(object.getId());
+		return hotspot != null && getHotspotAction(hotspot.getVarb()) != null;
+	}
+
+	boolean isContractComplete()
+	{
+		return currentHome != null && getRemainingTaskCount() == 0;
+	}
+
+	@Nullable
+	NPC getHomeownerNpc()
+	{
+		if (currentHome == null)
+		{
+			return null;
+		}
+
+		for (final NPC npc : client.getNpcs())
+		{
+			if (npc.getId() != currentHome.getNpcId())
+			{
+				continue;
+			}
+
+			final WorldPoint location = npc.getWorldLocation();
+			if (location != null && currentHome.getArea().distanceTo(
+				new WorldPoint(location.getX(), location.getY(), currentHome.getArea().getPlane())) == 0)
+			{
+				return npc;
+			}
+		}
+
+		return null;
 	}
 
 	private void checkForAssignmentDialog()
@@ -325,11 +442,21 @@ public class MahoganyHomesHighlighterPlugin extends Plugin
 		if (previous != null)
 		{
 			objectsToMark.remove(previous);
+			laddersToMark.remove(previous);
 		}
 
-		if (current != null && Hotspot.isHotspotObject(current.getId()))
+		if (current == null)
+		{
+			return;
+		}
+
+		if (Hotspot.isHotspotObject(current.getId()))
 		{
 			objectsToMark.add(current);
+		}
+		else if (Home.isLadder(current.getId()))
+		{
+			laddersToMark.add(current);
 		}
 	}
 
@@ -345,6 +472,11 @@ public class MahoganyHomesHighlighterPlugin extends Plugin
 
 	private boolean hasActiveContractWork()
 	{
+		if (currentHome != null)
+		{
+			return getRemainingTaskCount() > 0;
+		}
+
 		for (final Hotspot hotspot : Hotspot.values())
 		{
 			if (getHotspotAction(hotspot.getVarb()) != null)

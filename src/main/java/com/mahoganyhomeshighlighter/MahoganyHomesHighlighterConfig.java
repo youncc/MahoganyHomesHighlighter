@@ -14,19 +14,31 @@ public interface MahoganyHomesHighlighterConfig extends Config
 	String CURRENT_HOME_KEY = "currentHome";
 
 	@ConfigSection(
-		name = "Highlight colors",
-		description = "Colors used when highlighting contract objects",
+		name = "Furniture highlighting",
+		description = "Highlight contract furniture by task type",
 		position = 0
 	)
-	String colorSection = "colorSection";
+	String furnitureSection = "furnitureSection";
+
+	@ConfigItem(
+		keyName = "highlightFurniture",
+		name = "Highlight furniture",
+		description = "Highlight contract furniture that needs to be removed, built, or repaired",
+		section = furnitureSection,
+		position = 0
+	)
+	default boolean highlightFurniture()
+	{
+		return true;
+	}
 
 	@Alpha
 	@ConfigItem(
 		keyName = "removeColor",
 		name = "Remove color",
 		description = "Highlight color for furniture that needs to be removed",
-		section = colorSection,
-		position = 0
+		section = furnitureSection,
+		position = 1
 	)
 	default Color removeColor()
 	{
@@ -38,8 +50,8 @@ public interface MahoganyHomesHighlighterConfig extends Config
 		keyName = "buildColor",
 		name = "Build color",
 		description = "Highlight color for hotspots and furniture that needs to be built",
-		section = colorSection,
-		position = 1
+		section = furnitureSection,
+		position = 2
 	)
 	default Color buildColor()
 	{
@@ -51,8 +63,8 @@ public interface MahoganyHomesHighlighterConfig extends Config
 		keyName = "repairColor",
 		name = "Repair color",
 		description = "Highlight color for furniture that needs to be repaired",
-		section = colorSection,
-		position = 2
+		section = furnitureSection,
+		position = 3
 	)
 	default Color repairColor()
 	{
@@ -114,6 +126,82 @@ public interface MahoganyHomesHighlighterConfig extends Config
 	default boolean showDoorStatusText()
 	{
 		return false;
+	}
+
+	@ConfigSection(
+		name = "Stair highlighting",
+		description = "Highlight stairs and ladders when tasks remain on another floor",
+		position = 75
+	)
+	String stairSection = "stairSection";
+
+	@ConfigItem(
+		keyName = "highlightStairs",
+		name = "Highlight stairs",
+		description = "Highlight stairs and ladders that lead toward remaining contract tasks",
+		section = stairSection,
+		position = 0
+	)
+	default boolean highlightStairs()
+	{
+		return true;
+	}
+
+	@Alpha
+	@ConfigItem(
+		keyName = "stairColor",
+		name = "Stair color",
+		description = "Highlight color for stairs and ladders",
+		section = stairSection,
+		position = 1
+	)
+	default Color stairColor()
+	{
+		return new Color(255, 255, 0, 80);
+	}
+
+	@ConfigItem(
+		keyName = "showStairStatusText",
+		name = "Show stair status",
+		description = "Show task counts or turn-in hints above relevant stairs",
+		section = stairSection,
+		position = 2
+	)
+	default boolean showStairStatusText()
+	{
+		return true;
+	}
+
+	@ConfigSection(
+		name = "Homeowner highlighting",
+		description = "Highlight the contract homeowner when all tasks are complete",
+		position = 80
+	)
+	String homeownerSection = "homeownerSection";
+
+	@ConfigItem(
+		keyName = "highlightHomeowner",
+		name = "Highlight homeowner",
+		description = "Highlight the contract homeowner when all tasks are complete",
+		section = homeownerSection,
+		position = 0
+	)
+	default boolean highlightHomeowner()
+	{
+		return true;
+	}
+
+	@Alpha
+	@ConfigItem(
+		keyName = "homeownerColor",
+		name = "Homeowner color",
+		description = "Highlight color for the contract homeowner",
+		section = homeownerSection,
+		position = 1
+	)
+	default Color homeownerColor()
+	{
+		return new Color(0, 255, 255, 80);
 	}
 
 	@ConfigSection(
