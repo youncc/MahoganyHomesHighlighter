@@ -52,11 +52,34 @@ enum Home
 	{
 		for (final Home home : values())
 		{
-			if (home.getArea().contains(location))
+			if (home.containsLocation(location))
 			{
 				return home;
 			}
 		}
 		return null;
+	}
+
+	@Nullable
+	static Home getByEnumName(final String name)
+	{
+		if (name == null || name.isEmpty())
+		{
+			return null;
+		}
+
+		try
+		{
+			return valueOf(name.trim().toUpperCase());
+		}
+		catch (IllegalArgumentException e)
+		{
+			return null;
+		}
+	}
+
+	boolean containsLocation(final WorldPoint location)
+	{
+		return area.contains(new WorldPoint(location.getX(), location.getY(), area.getPlane()));
 	}
 }

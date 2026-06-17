@@ -167,6 +167,11 @@ class MahoganyHomesHighlighterOverlay extends Overlay
 
 	private static int distanceBetween(final WorldArea area, final WorldPoint point)
 	{
-		return area.distanceTo(new WorldPoint(point.getX(), point.getY(), area.getPlane()));
+		return area.distanceTo(horizontalPoint(area, point));
+	}
+
+	private static WorldPoint horizontalPoint(final WorldArea area, final WorldPoint point)
+	{
+		return new WorldPoint(point.getX(), point.getY(), area.getPlane());
 	}
 }
