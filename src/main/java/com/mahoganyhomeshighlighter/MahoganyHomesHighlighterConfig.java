@@ -60,6 +60,63 @@ public interface MahoganyHomesHighlighterConfig extends Config
 	}
 
 	@ConfigSection(
+		name = "Door highlighting",
+		description = "Highlight doors in your current contract house",
+		position = 50
+	)
+	String doorSection = "doorSection";
+
+	@ConfigItem(
+		keyName = "highlightDoors",
+		name = "Highlight doors",
+		description = "Highlight doors inside your current Mahogany Homes contract house",
+		section = doorSection,
+		position = 0
+	)
+	default boolean highlightDoors()
+	{
+		return true;
+	}
+
+	@Alpha
+	@ConfigItem(
+		keyName = "openDoorColor",
+		name = "Open door color",
+		description = "Highlight color for open doors",
+		section = doorSection,
+		position = 1
+	)
+	default Color openDoorColor()
+	{
+		return new Color(0, 200, 200, 80);
+	}
+
+	@Alpha
+	@ConfigItem(
+		keyName = "closedDoorColor",
+		name = "Closed door color",
+		description = "Highlight color for closed doors",
+		section = doorSection,
+		position = 2
+	)
+	default Color closedDoorColor()
+	{
+		return new Color(160, 80, 255, 80);
+	}
+
+	@ConfigItem(
+		keyName = "showDoorStatusText",
+		name = "Show door status",
+		description = "Show Open or Closed text above doors in your contract house",
+		section = doorSection,
+		position = 3
+	)
+	default boolean showDoorStatusText()
+	{
+		return false;
+	}
+
+	@ConfigSection(
 		name = "Render options",
 		description = "Options for how objects are highlighted",
 		position = 100,

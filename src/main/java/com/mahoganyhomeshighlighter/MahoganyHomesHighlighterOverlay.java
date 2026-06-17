@@ -3,9 +3,12 @@ package com.mahoganyhomeshighlighter;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Dimension;
+import java.awt.FontMetrics;
 import java.awt.Graphics2D;
+import java.awt.Rectangle;
 import java.awt.Shape;
 import java.awt.Stroke;
+import javax.annotation.Nullable;
 import javax.inject.Inject;
 import net.runelite.api.Client;
 import net.runelite.api.DecorativeObject;
@@ -49,7 +52,7 @@ class MahoganyHomesHighlighterOverlay extends Overlay
 	public Dimension render(Graphics2D graphics)
 	{
 		final Home home = plugin.getCurrentHome();
-		if (home == null || plugin.getObjectsToMark().isEmpty())
+		if (home == null)
 		{
 			return null;
 		}
@@ -60,53 +63,106 @@ class MahoganyHomesHighlighterOverlay extends Overlay
 			return null;
 		}
 
-		final int playerPlane = client.getTopLevelWorldView().getPlane();
+		final int playerPlane = playerLocation.getPlane();
 		final Point mousePosition = client.getMouseCanvasPosition();
 		final Stroke stroke = new BasicStroke(BORDER_WIDTH);
 
-		for (TileObject object : plugin.getObjectsToMark())
+		if (!plugin.getObjectsToMark().isEmpty())
 		{
-			if (object.getPlane() != playerPlane)
+			for (TileObject object : plugin.getObjectsToMark())
 			{
-				continue;
-			}
+				if (object.getPlane() != playerPlane)
+				{
+					continue;
+				}
 
-			if (distanceBetween(home.getArea(), object.getWorldLocation()) > 0)
-			{
-				continue;
-			}
+				if (distanceBetween(home.getArea(), object.getWorldLocation()) > 0)
+				{
+					continue;
+				}
 
-			final Hotspot hotspot = Hotspot.getByObjectId(object.getId());
-			if (hotspot == null)
-			{
-				continue;
-			}
+				final Hotspot hotspot = Hotspot.getByObjectId(object.getId());
+				if (hotspot == null)
+				{
+					continue;
+				}
 
-			final HotspotAction action = plugin.getHotspotAction(hotspot.getVarb());
-			if (action == null)
-			{
-				continue;
-			}
+				final HotspotAction action = plugin.getHotspotAction(hotspot.getVarb());
+				if (action == null)
+				{
+					continue;
+				}
 
-			final Color highlightColor = getColorForAction(action);
-			if (config.highlightClickbox())
-			{
-				OverlayUtil.renderHoverableArea(
-					graphics,
-					object.getClickbox(),
-					mousePosition,
-					highlightColor,
-					BORDER_COLOR,
-					HOVER_BORDER_COLOR);
-			}
-
-			if (config.highlightHull())
-			{
-				renderHull(graphics, object, highlightColor, stroke);
+				final Color highlightColor = getColorForAction(action);
+				renderHighlight(graphics, object, highlightColor, mousePosition, stroke);
 			}
 		}
 
+		if (config.highlightDoors() || config.showDoorStatusText())
+		{
+			renderDoors(graphics, home, playerPlane, mousePosition, stroke);
+		}
+
 		return null;
+	}
+
+	private void renderDoors(
+		Graphics2D graphics,
+		Home home,
+		int playerPlane,
+		Point mousePosition,
+		Stroke stroke)
+	{
+		ContractDoorUtil.forEachDoorInArea(client, home.getArea(), playerPlane, (object, state) ->
+		{
+			if (distanceBetween(home.getArea(), object.getWorldLocation()) > 0)
+			{
+				return;
+			}
+
+			final Color highlightColor = state == ContractDoorUtil.DoorState.OPEN
+				? config.openDoorColor()
+				: config.closedDoorColor();
+
+			if (config.highlightDoors())
+			{
+				renderHighlight(graphics, object, highlightColor, mousePosition, stroke);
+			}
+
+			if (config.showDoorStatusText())
+			{
+				final String text = state == ContractDoorUtil.DoorState.OPEN ? "Open" : "Closed";
+				final Point textLocation = getDoorStatusTextLocation(graphics, object, text);
+				if (textLocation != null)
+				{
+					OverlayUtil.renderTextLocation(graphics, textLocation, text, highlightColor);
+				}
+			}
+		});
+	}
+
+	private void renderHighlight(
+		Graphics2D graphics,
+		TileObject object,
+		Color highlightColor,
+		Point mousePosition,
+		Stroke stroke)
+	{
+		if (config.highlightClickbox())
+		{
+			OverlayUtil.renderHoverableArea(
+				graphics,
+				object.getClickbox(),
+				mousePosition,
+				highlightColor,
+				BORDER_COLOR,
+				HOVER_BORDER_COLOR);
+		}
+
+		if (config.highlightHull())
+		{
+			renderHull(graphics, object, highlightColor, stroke);
+		}
 	}
 
 	private Color getColorForAction(HotspotAction action)
@@ -122,6 +178,67 @@ class MahoganyHomesHighlighterOverlay extends Overlay
 			default:
 				return config.buildColor();
 		}
+	}
+
+	@Nullable
+	private Point getDoorStatusTextLocation(Graphics2D graphics, TileObject object, String text)
+	{
+		int topY = Integer.MAX_VALUE;
+		int centerX = 0;
+		boolean found = false;
+
+		for (final Shape hull : getHulls(object))
+		{
+			if (hull == null)
+			{
+				continue;
+			}
+
+			final Rectangle bounds = hull.getBounds();
+			if (bounds.width <= 0 || bounds.height <= 0)
+			{
+				continue;
+			}
+
+			if (bounds.y < topY)
+			{
+				topY = bounds.y;
+				centerX = bounds.x + bounds.width / 2;
+				found = true;
+			}
+		}
+
+		if (found)
+		{
+			final FontMetrics fontMetrics = graphics.getFontMetrics();
+			return new Point(centerX - fontMetrics.stringWidth(text) / 2, topY - 2);
+		}
+
+		return object.getCanvasTextLocation(graphics, text, 120);
+	}
+
+	private Shape[] getHulls(TileObject object)
+	{
+		if (object instanceof GameObject)
+		{
+			return new Shape[]{((GameObject) object).getConvexHull()};
+		}
+		else if (object instanceof WallObject)
+		{
+			final WallObject wallObject = (WallObject) object;
+			return new Shape[]{wallObject.getConvexHull(), wallObject.getConvexHull2()};
+		}
+		else if (object instanceof DecorativeObject)
+		{
+			final DecorativeObject decorativeObject = (DecorativeObject) object;
+			return new Shape[]{decorativeObject.getConvexHull(), decorativeObject.getConvexHull2()};
+		}
+		else if (object instanceof GroundObject)
+		{
+			return new Shape[]{((GroundObject) object).getConvexHull()};
+		}
+
+		return new Shape[]{object.getCanvasTilePoly()};
 	}
 
 	private void renderHull(Graphics2D graphics, TileObject object, Color color, Stroke stroke)
