@@ -1,5 +1,6 @@
 package com.mahoganyhomeshighlighter;
 
+import com.google.inject.Binder;
 import com.google.inject.Provides;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -21,6 +22,7 @@ import net.runelite.api.events.GameTick;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.widgets.ComponentID;
 import net.runelite.api.widgets.Widget;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
@@ -31,8 +33,10 @@ import net.runelite.client.util.Text;
 @Slf4j
 @PluginDescriptor(
 	name = "Mahogany Homes Highlighter",
+	configName = MahoganyHomesHighlighterConfig.GROUP_NAME,
 	description = "Highlights Mahogany Homes contract objects with customizable colors for remove, build, and repair tasks",
-	tags = {"mahogany", "homes", "construction", "highlight"}
+	tags = {"mahogany", "homes", "construction", "highlight"},
+	enabledByDefault = false
 )
 public class MahoganyHomesHighlighterPlugin extends Plugin
 {
@@ -43,8 +47,17 @@ public class MahoganyHomesHighlighterPlugin extends Plugin
 	private static final Pattern CONTRACT_FINISHED = Pattern.compile(
 		"You have completed [\\d,]* contracts with a total of [\\d,]* points?\\.");
 
+	private static final String MAHOGANY_HOMES_GROUP = "MahoganyHomes";
+	private static final String MAHOGANY_HOMES_HOME_KEY = "currentHome";
+
 	@Inject
 	private Client client;
+
+	@Inject
+	private ClientThread clientThread;
+
+	@Inject
+	private ConfigManager configManager;
 
 	@Inject
 	private MahoganyHomesHighlighterConfig config;
@@ -67,12 +80,24 @@ public class MahoganyHomesHighlighterPlugin extends Plugin
 	private boolean varbChange;
 
 	@Override
+	public void configure(Binder binder)
+	{
+		binder.bind(MahoganyHomesHighlighterOverlay.class);
+	}
+
+	@Override
 	protected void startUp()
 	{
+		if (highlightOverlay == null)
+		{
+			throw new IllegalStateException("MahoganyHomesHighlighterOverlay was not injected");
+		}
+
 		overlayManager.add(highlightOverlay);
 		if (client.getGameState() == GameState.LOGGED_IN)
 		{
-			updateVarbMap();
+			varbChange = true;
+			clientThread.invoke(this::initializeLoggedInState);
 		}
 	}
 
@@ -97,6 +122,11 @@ public class MahoganyHomesHighlighterPlugin extends Plugin
 		if (event.getGameState() == GameState.LOADING)
 		{
 			objectsToMark.clear();
+		}
+		else if (event.getGameState() == GameState.LOGGED_IN)
+		{
+			varbChange = true;
+			clientThread.invoke(this::initializeLoggedInState);
 		}
 	}
 
@@ -136,14 +166,7 @@ public class MahoganyHomesHighlighterPlugin extends Plugin
 			updateVarbMap();
 		}
 
-		if (currentHome == null && client.getLocalPlayer() != null)
-		{
-			final Home homeAtLocation = Home.getByLocation(client.getLocalPlayer().getWorldLocation());
-			if (homeAtLocation != null && hasActiveContractWork())
-			{
-				currentHome = homeAtLocation;
-			}
-		}
+		tryDetectHomeFromLocation();
 	}
 
 	@Subscribe
@@ -156,7 +179,7 @@ public class MahoganyHomesHighlighterPlugin extends Plugin
 
 		if (CONTRACT_FINISHED.matcher(Text.removeTags(event.getMessage())).matches())
 		{
-			currentHome = null;
+			setCurrentHome(null);
 			varbMap.clear();
 		}
 	}
@@ -203,9 +226,99 @@ public class MahoganyHomesHighlighterPlugin extends Plugin
 		final Home home = Home.getByName(name);
 		if (home != null)
 		{
-			currentHome = home;
+			setCurrentHome(home);
 			updateVarbMap();
 		}
+	}
+
+	private void initializeLoggedInState()
+	{
+		loadCurrentHome();
+		updateVarbMap();
+		tryDetectHomeFromLocation();
+	}
+
+	private void loadCurrentHome()
+	{
+		if (currentHome != null)
+		{
+			return;
+		}
+
+		final String savedHome = configManager.getRSProfileConfiguration(
+			MahoganyHomesHighlighterConfig.GROUP_NAME,
+			MahoganyHomesHighlighterConfig.CURRENT_HOME_KEY);
+		final Home home = parseHomeName(savedHome);
+		if (home != null)
+		{
+			currentHome = home;
+			return;
+		}
+
+		final long accountHash = client.getAccountHash();
+		if (accountHash == -1L)
+		{
+			return;
+		}
+
+		final String mahoganyHomesGroup = MAHOGANY_HOMES_GROUP + "." + accountHash;
+		final String mahoganyHomesHome = configManager.getConfiguration(
+			mahoganyHomesGroup,
+			MAHOGANY_HOMES_HOME_KEY);
+		final Home mahoganyHomesContract = parseHomeName(mahoganyHomesHome);
+		if (mahoganyHomesContract != null)
+		{
+			currentHome = mahoganyHomesContract;
+		}
+	}
+
+	@Nullable
+	private Home parseHomeName(@Nullable final String name)
+	{
+		if (name == null || name.isEmpty())
+		{
+			return null;
+		}
+
+		final Home byEnumName = Home.getByEnumName(name);
+		if (byEnumName != null)
+		{
+			return byEnumName;
+		}
+
+		return Home.getByName(name);
+	}
+
+	private void tryDetectHomeFromLocation()
+	{
+		if (currentHome != null || client.getLocalPlayer() == null)
+		{
+			return;
+		}
+
+		final Home homeAtLocation = Home.getByLocation(client.getLocalPlayer().getWorldLocation());
+		if (homeAtLocation != null && hasActiveContractWork())
+		{
+			setCurrentHome(homeAtLocation);
+		}
+	}
+
+	private void setCurrentHome(@Nullable final Home home)
+	{
+		currentHome = home;
+
+		if (home == null)
+		{
+			configManager.unsetRSProfileConfiguration(
+				MahoganyHomesHighlighterConfig.GROUP_NAME,
+				MahoganyHomesHighlighterConfig.CURRENT_HOME_KEY);
+			return;
+		}
+
+		configManager.setRSProfileConfiguration(
+			MahoganyHomesHighlighterConfig.GROUP_NAME,
+			MahoganyHomesHighlighterConfig.CURRENT_HOME_KEY,
+			home.name());
 	}
 
 	private void processGameObject(@Nullable GameObject current, @Nullable GameObject previous)

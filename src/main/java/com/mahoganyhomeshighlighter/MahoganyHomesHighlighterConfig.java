@@ -11,6 +11,7 @@ import net.runelite.client.config.ConfigSection;
 public interface MahoganyHomesHighlighterConfig extends Config
 {
 	String GROUP_NAME = "mahoganyhomeshighlighter";
+	String CURRENT_HOME_KEY = "currentHome";
 
 	@ConfigSection(
 		name = "Highlight colors",
