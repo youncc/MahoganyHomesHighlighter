@@ -35,8 +35,7 @@ import net.runelite.client.util.Text;
 	name = "Mahogany Homes Highlighter",
 	configName = MahoganyHomesHighlighterConfig.GROUP_NAME,
 	description = "Highlights Mahogany Homes contract objects with customizable colors for remove, build, and repair tasks",
-	tags = {"mahogany", "homes", "construction", "highlight"},
-	enabledByDefault = false
+	tags = {"mahogany", "homes", "construction", "highlight"}
 )
 public class MahoganyHomesHighlighterPlugin extends Plugin
 {
