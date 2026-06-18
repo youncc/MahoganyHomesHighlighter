@@ -15,6 +15,21 @@ enum HotspotAction
 		this.varbValue = varbValue;
 	}
 
+	String getLabel()
+	{
+		switch (this)
+		{
+			case REMOVE:
+				return "Remove";
+			case BUILD:
+				return "Build";
+			case REPAIR:
+				return "Repair";
+			default:
+				return name();
+		}
+	}
+
 	@Nullable
 	static HotspotAction fromVarbValue(final int value)
 	{

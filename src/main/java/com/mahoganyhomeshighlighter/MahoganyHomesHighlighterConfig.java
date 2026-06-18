@@ -6,6 +6,7 @@ import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.ConfigSection;
+import net.runelite.client.config.Range;
 
 @ConfigGroup(MahoganyHomesHighlighterConfig.GROUP_NAME)
 public interface MahoganyHomesHighlighterConfig extends Config
@@ -71,6 +72,18 @@ public interface MahoganyHomesHighlighterConfig extends Config
 		return new Color(255, 165, 0, 80);
 	}
 
+	@ConfigItem(
+		keyName = "showFurnitureActionText",
+		name = "Show action",
+		description = "Show Remove, Build, or Repair text on contract furniture",
+		section = furnitureSection,
+		position = 4
+	)
+	default boolean showFurnitureActionText()
+	{
+		return false;
+	}
+
 	@ConfigSection(
 		name = "Door highlighting",
 		description = "Highlight doors in your current contract house",
@@ -119,7 +132,7 @@ public interface MahoganyHomesHighlighterConfig extends Config
 	@ConfigItem(
 		keyName = "showDoorStatusText",
 		name = "Show door status",
-		description = "Show Open or Closed text above doors in your contract house",
+		description = "Show Open or Closed text on doors in your contract house",
 		section = doorSection,
 		position = 3
 	)
@@ -138,7 +151,7 @@ public interface MahoganyHomesHighlighterConfig extends Config
 	@ConfigItem(
 		keyName = "highlightStairs",
 		name = "Highlight stairs",
-		description = "Highlight stairs and ladders that lead toward remaining contract tasks",
+		description = "Highlight stairs and ladders that lead toward remaining contract tasks using the render options below",
 		section = stairSection,
 		position = 0
 	)
@@ -163,7 +176,7 @@ public interface MahoganyHomesHighlighterConfig extends Config
 	@ConfigItem(
 		keyName = "showStairStatusText",
 		name = "Show stair status",
-		description = "Show task counts or turn-in hints above relevant stairs",
+		description = "Show task counts or turn-in hints on relevant stairs. Text only; visuals use the render options",
 		section = stairSection,
 		position = 2
 	)
@@ -225,14 +238,119 @@ public interface MahoganyHomesHighlighterConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "highlightOutline",
+		name = "Highlight outline",
+		description = "Highlight the 3D model outline",
+		section = renderSection,
+		position = 1
+	)
+	default boolean highlightOutline()
+	{
+		return false;
+	}
+
+	@ConfigItem(
 		keyName = "highlightClickbox",
 		name = "Highlight clickbox",
 		description = "Highlight the object clickbox",
 		section = renderSection,
-		position = 1
+		position = 2
 	)
 	default boolean highlightClickbox()
 	{
 		return false;
+	}
+
+	@ConfigItem(
+		keyName = "highlightTile",
+		name = "Highlight tile",
+		description = "Highlight the tile under the object",
+		section = renderSection,
+		position = 3
+	)
+	default boolean highlightTile()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = "borderWidth",
+		name = "Border width",
+		description = "Width of highlighted borders",
+		section = renderSection,
+		position = 4
+	)
+	default double borderWidth()
+	{
+		return 2;
+	}
+
+	@ConfigItem(
+		keyName = "outlineFeather",
+		name = "Outline feather",
+		description = "Specify between 0-4 how much of the model outline should be faded",
+		section = renderSection,
+		position = 5
+	)
+	@Range(
+		min = 0,
+		max = 4
+	)
+	default int outlineFeather()
+	{
+		return 0;
+	}
+
+	@ConfigItem(
+		keyName = "fillOpacity",
+		name = "Fill opacity",
+		description = "Opacity of hull and NPC highlight fills",
+		section = renderSection,
+		position = 6
+	)
+	@Range(
+		max = 255
+	)
+	default int fillOpacity()
+	{
+		return 50;
+	}
+
+	@Alpha
+	@ConfigItem(
+		keyName = "clickboxBorderColor",
+		name = "Clickbox border color",
+		description = "Border color for highlighted clickboxes",
+		section = renderSection,
+		position = 7
+	)
+	default Color clickboxBorderColor()
+	{
+		return Color.WHITE;
+	}
+
+	@Alpha
+	@ConfigItem(
+		keyName = "clickboxHoverBorderColor",
+		name = "Clickbox hover border color",
+		description = "Border color for highlighted clickboxes when hovered",
+		section = renderSection,
+		position = 8
+	)
+	default Color clickboxHoverBorderColor()
+	{
+		return Color.GRAY;
+	}
+
+	@ConfigItem(
+		keyName = "statusTextPosition",
+		name = "Status text position",
+		description = "Where door, stair, and furniture status text is drawn relative to the object",
+		section = renderSection,
+		position = 9
+	)
+	default StatusTextPosition statusTextPosition()
+	{
+		return StatusTextPosition.ABOVE;
 	}
 }

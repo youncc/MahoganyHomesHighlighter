@@ -5,9 +5,12 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
+import java.awt.Polygon;
 import java.awt.Rectangle;
 import java.awt.Shape;
 import java.awt.Stroke;
+import java.util.HashSet;
+import java.util.Set;
 import javax.annotation.Nullable;
 import javax.inject.Inject;
 import net.runelite.api.Client;
@@ -25,22 +28,22 @@ import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
 import net.runelite.client.ui.overlay.OverlayUtil;
+import net.runelite.client.ui.overlay.outline.ModelOutlineRenderer;
+import net.runelite.client.util.ColorUtil;
 
 class MahoganyHomesHighlighterOverlay extends Overlay
 {
-	private static final Color BORDER_COLOR = Color.WHITE;
-	private static final Color HOVER_BORDER_COLOR = Color.GRAY;
-	private static final float BORDER_WIDTH = 2f;
-
 	private final MahoganyHomesHighlighterPlugin plugin;
 	private final MahoganyHomesHighlighterConfig config;
 	private final Client client;
+	private final ModelOutlineRenderer modelOutlineRenderer;
 
 	@Inject
 	MahoganyHomesHighlighterOverlay(
 		MahoganyHomesHighlighterPlugin plugin,
 		MahoganyHomesHighlighterConfig config,
-		Client client)
+		Client client,
+		ModelOutlineRenderer modelOutlineRenderer)
 	{
 		super(plugin);
 		setPosition(OverlayPosition.DYNAMIC);
@@ -48,6 +51,7 @@ class MahoganyHomesHighlighterOverlay extends Overlay
 		this.plugin = plugin;
 		this.config = config;
 		this.client = client;
+		this.modelOutlineRenderer = modelOutlineRenderer;
 	}
 
 	@Override
@@ -67,9 +71,11 @@ class MahoganyHomesHighlighterOverlay extends Overlay
 
 		final int playerPlane = playerLocation.getPlane();
 		final Point mousePosition = client.getMouseCanvasPosition();
-		final Stroke stroke = new BasicStroke(BORDER_WIDTH);
+		final Stroke stroke = new BasicStroke((float) config.borderWidth());
+		final int outlineWidth = (int) config.borderWidth();
 
-		if (config.highlightFurniture() && !plugin.getObjectsToMark().isEmpty())
+		if (((config.highlightFurniture() && hasActiveRenderStyle()) || config.showFurnitureActionText())
+			&& !plugin.getObjectsToMark().isEmpty())
 		{
 			for (TileObject object : plugin.getObjectsToMark())
 			{
@@ -101,23 +107,37 @@ class MahoganyHomesHighlighterOverlay extends Overlay
 				}
 
 				final Color highlightColor = getColorForAction(action);
-				renderHighlight(graphics, object, highlightColor, mousePosition, stroke);
+
+				if (config.highlightFurniture() && hasActiveRenderStyle())
+				{
+					renderTileObjectHighlight(graphics, object, highlightColor, mousePosition, stroke, outlineWidth);
+				}
+
+				if (config.showFurnitureActionText())
+				{
+					final String text = action.getLabel();
+					final Point textLocation = getObjectStatusTextLocation(graphics, object, text);
+					if (textLocation != null)
+					{
+						OverlayUtil.renderTextLocation(graphics, textLocation, text, highlightColor);
+					}
+				}
 			}
 		}
 
-		if (config.highlightDoors() || config.showDoorStatusText())
+		if ((config.highlightDoors() && hasActiveRenderStyle()) || config.showDoorStatusText())
 		{
-			renderDoors(graphics, home, playerPlane, mousePosition, stroke);
+			renderDoors(graphics, home, playerPlane, mousePosition, stroke, outlineWidth);
 		}
 
-		if (config.highlightStairs() || config.showStairStatusText())
+		if ((config.highlightStairs() && hasActiveRenderStyle()) || config.showStairStatusText())
 		{
-			renderStairs(graphics, home, playerPlane, mousePosition, stroke);
+			renderStairs(graphics, home, playerPlane, mousePosition, stroke, outlineWidth);
 		}
 
-		if (config.highlightHomeowner() && plugin.isContractComplete())
+		if (config.highlightHomeowner() && hasActiveRenderStyle() && plugin.isContractComplete())
 		{
-			renderHomeowner(graphics, stroke);
+			renderHomeowner(graphics, stroke, outlineWidth);
 		}
 
 		return null;
@@ -128,7 +148,8 @@ class MahoganyHomesHighlighterOverlay extends Overlay
 		Home home,
 		int playerPlane,
 		Point mousePosition,
-		Stroke stroke)
+		Stroke stroke,
+		int outlineWidth)
 	{
 		ContractDoorUtil.forEachDoorInArea(client, home.getArea(), playerPlane, (object, state) ->
 		{
@@ -141,9 +162,9 @@ class MahoganyHomesHighlighterOverlay extends Overlay
 				? config.openDoorColor()
 				: config.closedDoorColor();
 
-			if (config.highlightDoors())
+			if (config.highlightDoors() && hasActiveRenderStyle())
 			{
-				renderHighlight(graphics, object, highlightColor, mousePosition, stroke);
+				renderTileObjectHighlight(graphics, object, highlightColor, mousePosition, stroke, outlineWidth);
 			}
 
 			if (config.showDoorStatusText())
@@ -163,7 +184,8 @@ class MahoganyHomesHighlighterOverlay extends Overlay
 		Home home,
 		int playerPlane,
 		Point mousePosition,
-		Stroke stroke)
+		Stroke stroke,
+		int outlineWidth)
 	{
 		final int remainingTasks = plugin.getRemainingTaskCount();
 		final int countOnFloor = plugin.getRemainingTasksOnPlane(playerPlane);
@@ -177,6 +199,8 @@ class MahoganyHomesHighlighterOverlay extends Overlay
 		final int tasksAbove = ContractStairUtil.countTasksAbove(playerPlane, countOnFloor, remainingTasks, visibleAbove);
 		final int tasksBelow = ContractStairUtil.countTasksBelow(playerPlane, countOnFloor, remainingTasks, visibleBelow);
 		final Color highlightColor = config.stairColor();
+		final boolean renderStairVisuals = config.highlightStairs() && hasActiveRenderStyle();
+		final Set<WorldPoint> indicatedStairTiles = new HashSet<>();
 
 		for (final GameObject ladder : plugin.getLaddersToMark())
 		{
@@ -202,9 +226,15 @@ class MahoganyHomesHighlighterOverlay extends Overlay
 				continue;
 			}
 
-			if (config.highlightStairs())
+			final WorldPoint ladderLocation = ladder.getWorldLocation();
+			if (ladderLocation != null && !indicatedStairTiles.add(ladderLocation))
 			{
-				renderHighlight(graphics, ladder, highlightColor, mousePosition, stroke);
+				continue;
+			}
+
+			if (renderStairVisuals)
+			{
+				renderTileObjectHighlight(graphics, ladder, highlightColor, mousePosition, stroke, outlineWidth);
 			}
 
 			if (config.showStairStatusText())
@@ -223,7 +253,7 @@ class MahoganyHomesHighlighterOverlay extends Overlay
 		}
 	}
 
-	private void renderHomeowner(Graphics2D graphics, Stroke stroke)
+	private void renderHomeowner(Graphics2D graphics, Stroke stroke, int outlineWidth)
 	{
 		final NPC homeowner = plugin.getHomeownerNpc();
 		if (homeowner == null)
@@ -232,15 +262,38 @@ class MahoganyHomesHighlighterOverlay extends Overlay
 		}
 
 		final Color highlightColor = config.homeownerColor();
-		final Shape hull = homeowner.getConvexHull();
-		if (hull != null)
+		final Color hullFillColor = getHullFillColor(highlightColor);
+
+		if (config.highlightHull())
 		{
-			final Color fillColor = new Color(
-				highlightColor.getRed(),
-				highlightColor.getGreen(),
-				highlightColor.getBlue(),
-				Math.min(highlightColor.getAlpha(), 50));
-			OverlayUtil.renderPolygon(graphics, hull, highlightColor, fillColor, stroke);
+			final Shape hull = homeowner.getConvexHull();
+			if (hull != null)
+			{
+				OverlayUtil.renderPolygon(graphics, hull, highlightColor, hullFillColor, stroke);
+			}
+		}
+
+		if (config.highlightTile())
+		{
+			final Polygon tilePoly = homeowner.getCanvasTilePoly();
+			if (tilePoly != null)
+			{
+				OverlayUtil.renderPolygon(
+					graphics,
+					tilePoly,
+					highlightColor,
+					getLightFillColor(highlightColor),
+					stroke);
+			}
+		}
+
+		if (config.highlightOutline())
+		{
+			modelOutlineRenderer.drawOutline(
+				homeowner,
+				outlineWidth,
+				highlightColor,
+				config.outlineFeather());
 		}
 
 		if (config.highlightClickbox())
@@ -249,12 +302,13 @@ class MahoganyHomesHighlighterOverlay extends Overlay
 		}
 	}
 
-	private void renderHighlight(
+	private void renderTileObjectHighlight(
 		Graphics2D graphics,
 		TileObject object,
 		Color highlightColor,
 		Point mousePosition,
-		Stroke stroke)
+		Stroke stroke,
+		int outlineWidth)
 	{
 		if (config.highlightClickbox())
 		{
@@ -263,14 +317,60 @@ class MahoganyHomesHighlighterOverlay extends Overlay
 				object.getClickbox(),
 				mousePosition,
 				highlightColor,
-				BORDER_COLOR,
-				HOVER_BORDER_COLOR);
+				config.clickboxBorderColor(),
+				config.clickboxHoverBorderColor());
 		}
 
 		if (config.highlightHull())
 		{
-			renderHull(graphics, object, highlightColor, stroke);
+			renderHull(graphics, object, highlightColor, stroke, !config.highlightTile());
 		}
+
+		if (config.highlightOutline())
+		{
+			modelOutlineRenderer.drawOutline(
+				object,
+				outlineWidth,
+				highlightColor,
+				config.outlineFeather());
+		}
+
+		if (config.highlightTile())
+		{
+			final Polygon tilePoly = object.getCanvasTilePoly();
+			if (tilePoly != null)
+			{
+				OverlayUtil.renderPolygon(
+					graphics,
+					tilePoly,
+					highlightColor,
+					getLightFillColor(highlightColor),
+					stroke);
+			}
+		}
+	}
+
+	private Color getHullFillColor(Color highlightColor)
+	{
+		return new Color(
+			highlightColor.getRed(),
+			highlightColor.getGreen(),
+			highlightColor.getBlue(),
+			config.fillOpacity());
+	}
+
+	private Color getLightFillColor(Color highlightColor)
+	{
+		final int alpha = Math.max(1, config.fillOpacity() / 12);
+		return ColorUtil.colorWithAlpha(highlightColor, alpha);
+	}
+
+	private boolean hasActiveRenderStyle()
+	{
+		return config.highlightHull()
+			|| config.highlightOutline()
+			|| config.highlightClickbox()
+			|| config.highlightTile();
 	}
 
 	private Color getColorForAction(HotspotAction action)
@@ -291,8 +391,10 @@ class MahoganyHomesHighlighterOverlay extends Overlay
 	@Nullable
 	private Point getObjectStatusTextLocation(Graphics2D graphics, TileObject object, String text)
 	{
-		int topY = Integer.MAX_VALUE;
-		int centerX = 0;
+		int minX = Integer.MAX_VALUE;
+		int minY = Integer.MAX_VALUE;
+		int maxX = Integer.MIN_VALUE;
+		int maxY = Integer.MIN_VALUE;
 		boolean found = false;
 
 		for (final Shape hull : getHulls(object))
@@ -308,21 +410,45 @@ class MahoganyHomesHighlighterOverlay extends Overlay
 				continue;
 			}
 
-			if (bounds.y < topY)
-			{
-				topY = bounds.y;
-				centerX = bounds.x + bounds.width / 2;
-				found = true;
-			}
+			minX = Math.min(minX, bounds.x);
+			minY = Math.min(minY, bounds.y);
+			maxX = Math.max(maxX, bounds.x + bounds.width);
+			maxY = Math.max(maxY, bounds.y + bounds.height);
+			found = true;
 		}
+
+		final FontMetrics fontMetrics = graphics.getFontMetrics();
+		final int textWidth = fontMetrics.stringWidth(text);
 
 		if (found)
 		{
-			final FontMetrics fontMetrics = graphics.getFontMetrics();
-			return new Point(centerX - fontMetrics.stringWidth(text) / 2, topY - 2);
+			final int centerX = (minX + maxX) / 2;
+			switch (config.statusTextPosition())
+			{
+				case ON:
+					return new Point(
+						centerX - textWidth / 2,
+						(minY + maxY) / 2 + fontMetrics.getAscent() / 2);
+				case BELOW:
+					return new Point(
+						centerX - textWidth / 2,
+						maxY + fontMetrics.getDescent() + 2);
+				case ABOVE:
+					return new Point(centerX - textWidth / 2, minY - 2);
+			}
 		}
 
-		return object.getCanvasTextLocation(graphics, text, 120);
+		switch (config.statusTextPosition())
+		{
+			case ON:
+				return object.getCanvasTextLocation(graphics, text, 0);
+			case BELOW:
+				return object.getCanvasTextLocation(graphics, text, -40);
+			case ABOVE:
+				return object.getCanvasTextLocation(graphics, text, 120);
+		}
+
+		return null;
 	}
 
 	private Shape[] getHulls(TileObject object)
@@ -349,7 +475,7 @@ class MahoganyHomesHighlighterOverlay extends Overlay
 		return new Shape[]{object.getCanvasTilePoly()};
 	}
 
-	private void renderHull(Graphics2D graphics, TileObject object, Color color, Stroke stroke)
+	private void renderHull(Graphics2D graphics, TileObject object, Color color, Stroke stroke, boolean allowTileFallback)
 	{
 		final Shape polygon;
 		Shape polygon2 = null;
@@ -372,12 +498,16 @@ class MahoganyHomesHighlighterOverlay extends Overlay
 		{
 			polygon = ((GroundObject) object).getConvexHull();
 		}
-		else
+		else if (allowTileFallback)
 		{
 			polygon = object.getCanvasTilePoly();
 		}
+		else
+		{
+			polygon = null;
+		}
 
-		final Color fillColor = new Color(color.getRed(), color.getGreen(), color.getBlue(), Math.min(color.getAlpha(), 50));
+		final Color fillColor = getHullFillColor(color);
 
 		if (polygon != null)
 		{
